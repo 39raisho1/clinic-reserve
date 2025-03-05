@@ -38,7 +38,7 @@ export default function Home() {
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white shadow-md rounded-lg">
-      <h1 className="text-2xl font-bold mb-4">予約システム</h1>
+      <h1 className="text-2xl font-bold mb-4">けんおう皮膚科クリニック予約サイト</h1>
 
       {!success ? (
         <form onSubmit={handleSubmit}>
