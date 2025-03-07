@@ -1,16 +1,7 @@
-
 {
-    "redirects": [
-      {
-        "source": "/shoshin",
-        "destination": "/shoshin",
-        "permanent": true
-      },
-      {
-        "source": "/saishin",
-        "destination": "/saishin",
-        "permanent": true
-      }
+    "routes": [
+      { "src": "/shoshin", "dest": "/shoshin" },
+      { "src": "/saishin", "dest": "/saishin" }
     ]
   }
   
