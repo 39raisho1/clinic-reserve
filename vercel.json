@@ -1,7 +1,7 @@
 {
-    "routes": [
-      { "src": "/shoshin", "dest": "/shoshin" },
-      { "src": "/saishin", "dest": "/saishin" }
+    "redirects": [
+      { "source": "/shoshin", "destination": "/reservation/shoshin", "permanent": true },
+      { "source": "/saishin", "destination": "/reservation/saishin", "permanent": true }
     ]
   }
   
