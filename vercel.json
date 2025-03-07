@@ -1,0 +1,16 @@
+
+{
+    "redirects": [
+      {
+        "source": "/shoshin",
+        "destination": "/shoshin",
+        "permanent": true
+      },
+      {
+        "source": "/saishin",
+        "destination": "/saishin",
+        "permanent": true
+      }
+    ]
+  }
+  
