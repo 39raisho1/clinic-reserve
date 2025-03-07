@@ -1,42 +1,29 @@
 import React, { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { collection, onSnapshot, query, where, orderBy, limit, doc, getDoc } from "firebase/firestore";
+import { db } from "../firebaseConfig";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 export default function CallScreen() {
   const [currentCalls, setCurrentCalls] = useState([]);
-  const [callLimit, setCallLimit] = useState(1); // デフォルトで1人
 
   useEffect(() => {
     console.log("📡 Firestore 監視を開始...");
 
-    // 🔹 Firestore から「呼び出し患者数」の設定を取得
-    const fetchCallLimit = async () => {
-      const settingsRef = doc(db, "settings", "config");
-      const settingsSnap = await getDoc(settingsRef);
-      if (settingsSnap.exists()) {
-        setCallLimit(settingsSnap.data().callCount || 1);
-      }
-    };
-
-    fetchCallLimit();
-
-    // 🔹 Firestore の `reservations` コレクションから「呼び出し中」の患者を取得
+    // 🔹 Firestore の `reservations` コレクションをリアルタイム監視（orderBy を削除）
     const callQuery = query(
       collection(db, "reservations"),
-      where("status", "==", "呼び出し中"),
-      orderBy("timestamp", "asc"),
-      limit(callLimit)
+      where("status", "==", "呼び出し中")
     );
 
     const unsubscribeCall = onSnapshot(callQuery, (snapshot) => {
-      const callList = snapshot.docs.map(doc => doc.data());
+      const callList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log("📡 呼び出し中の患者一覧:", callList);
       setCurrentCalls(callList);
     });
 
     return () => {
       unsubscribeCall();
     };
-  }, [callLimit]);
+  }, []);
 
   return (
     <div className="h-screen flex flex-col items-center justify-center bg-blue-500 text-white text-center">
@@ -44,9 +31,9 @@ export default function CallScreen() {
       
       {currentCalls.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-          {currentCalls.map((call, index) => (
-            <div key={index} className="p-16 bg-white text-black rounded-2xl shadow-xl flex items-center justify-center">
-              <p className="text-8xl font-extrabold">{call.reservationNumber}</p>
+          {currentCalls.map((call) => (
+            <div key={call.id} className="p-16 bg-white text-black rounded-2xl shadow-xl flex items-center justify-center">
+              <p className="text-8xl font-extrabold">{call.receptionNumber}</p>
             </div>
           ))}
         </div>

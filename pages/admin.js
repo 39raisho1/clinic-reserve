@@ -1,160 +1,182 @@
-import { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { collection, onSnapshot, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
+import { db } from "../firebaseConfig";
+import { collection, onSnapshot, query, orderBy, updateDoc, doc, deleteDoc } from "firebase/firestore";
 
-export default function Admin() {
+const AdminPage = () => {
   const [reservations, setReservations] = useState([]);
-  const [confirmDelete, setConfirmDelete] = useState(true);
-  const [sortKey, setSortKey] = useState("reservationNumber");
-  const [selectedReservations, setSelectedReservations] = useState(new Set());
+  const [sortConfig, setSortConfig] = useState({ key: "receptionNumber", direction: "asc" });
+  const [selectedReservations, setSelectedReservations] = useState([]);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "reservations"), (snapshot) => {
-      let data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        reservationNumber: Number(doc.data().reservationNumber) || 0,
-        timestamp: doc.data().timestamp?.toDate() || new Date(0),
-        birthdate: doc.data().birthdate ? new Date(doc.data().birthdate) : new Date(0)
-      }));
+    console.log("📡 Firestore 監視を開始...");
 
-      if (sortKey === "reservationNumber") {
-        data.sort((a, b) => a.reservationNumber - b.reservationNumber);
-      } else if (sortKey === "name") {
-        data.sort((a, b) => a.name.localeCompare(b.name));
-      } else if (sortKey === "timestamp") {
-        data.sort((a, b) => a.timestamp - b.timestamp);
-      } else if (sortKey === "birthdate") {
-        data.sort((a, b) => a.birthdate - b.birthdate);
-      }
+    const q = query(collection(db, "reservations"), orderBy("createdAt", "desc"));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log("📡 Firestoreからデータ取得:", data);
 
-      setReservations(data);
+      setReservations(sortData(data, sortConfig.key, sortConfig.direction));
     });
 
     return () => unsubscribe();
-  }, [sortKey]);
+  }, []);
 
-  const handleStatusChange = async (id, newStatus) => {
-    try {
-      await updateDoc(doc(db, "reservations", id), { status: newStatus });
-    } catch (error) {
-      console.error("❌ ステータスの更新に失敗しました", error);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (confirmDelete && !confirm("本当にこの予約を削除しますか？")) {
-      return;
-    }
-    try {
-      await deleteDoc(doc(db, "reservations", id));
-    } catch (error) {
-      console.error("❌ 削除に失敗しました", error);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (confirmDelete && !confirm("選択した予約をまとめて削除しますか？")) {
-      return;
-    }
-    try {
-      for (let id of selectedReservations) {
-        await deleteDoc(doc(db, "reservations", id));
-      }
-      setSelectedReservations(new Set());
-    } catch (error) {
-      console.error("❌ 一括削除に失敗しました", error);
-    }
-  };
-
-  const toggleSelection = (id) => {
-    setSelectedReservations((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
+  // 🔹 データをソートする関数
+  const sortData = (data, key, direction) => {
+    return [...data].sort((a, b) => {
+      const aValue = a[key] ?? "";
+      const bValue = b[key] ?? "";
+      return direction === "asc"
+        ? aValue > bValue ? 1 : -1
+        : aValue < bValue ? 1 : -1;
     });
   };
 
+  // 🔹 ソート処理
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+
+    setSortConfig({ key, direction });
+
+    setReservations((prevReservations) => sortData(prevReservations, key, direction));
+  };
+
+  // 🔹 状態に応じたセルの色
   const getStatusColor = (status) => {
     switch (status) {
-      case "受付済み":
-        return "bg-blue-200 text-blue-800";
-      case "診察待ち":
-        return "bg-yellow-200 text-yellow-800";
-      case "呼び出し中":
-        return "bg-red-200 text-red-800";
+      case "受付済":
+        return "bg-blue-300";
       case "診察中":
-        return "bg-green-200 text-green-800";
-      case "会計待ち":
-        return "bg-purple-200 text-purple-800";
-      case "診察終了":
-        return "bg-gray-300 text-gray-800";
+        return "bg-yellow-300";
+      case "呼び出し中":
+        return "bg-red-300";
+      case "キャンセル済み":
+        return "bg-gray-300";
       default:
-        return "bg-white text-black";
+        return "";
+    }
+  };
+
+  // 🔹 初診・再診の色付け
+  const getTypeColor = (type) => {
+    switch (type) {
+      case "初診":
+        return "bg-blue-200";
+      case "再診":
+        return "bg-green-200";
+      default:
+        return "";
+    }
+  };
+
+  // 🔹 ステータス変更処理
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      await updateDoc(doc(db, "reservations", id), { status: newStatus });
+      console.log(`✅ 予約 ${id} のステータスを「${newStatus}」に変更`);
+
+      setReservations((prevReservations) => {
+        const updatedReservations = prevReservations.map((res) =>
+          res.id === id ? { ...res, status: newStatus } : res
+        );
+        return sortData(updatedReservations, sortConfig.key, sortConfig.direction);
+      });
+    } catch (error) {
+      console.error("❌ ステータスの更新に失敗:", error);
+    }
+  };
+
+  // 🔹 予約の選択処理
+  const handleSelectReservation = (id) => {
+    setSelectedReservations((prevSelected) =>
+      prevSelected.includes(id)
+        ? prevSelected.filter(reservationId => reservationId !== id)
+        : [...prevSelected, id]
+    );
+  };
+
+  // 🔹 選択した予約を削除
+  const handleDeleteSelected = async () => {
+    if (selectedReservations.length === 0) {
+      alert("削除する予約を選択してください！");
+      return;
+    }
+
+    const confirmDelete = window.confirm(`選択した ${selectedReservations.length} 件の予約を削除しますか？`);
+    if (!confirmDelete) return;
+
+    try {
+      await Promise.all(selectedReservations.map(id => deleteDoc(doc(db, "reservations", id))));
+      console.log(`🗑️ ${selectedReservations.length} 件の予約を削除しました`);
+      setSelectedReservations([]);
+    } catch (error) {
+      console.error("❌ 予約の削除に失敗:", error);
+      alert("予約の削除に失敗しました。");
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white shadow-md rounded-lg">
-      <h1 className="text-2xl font-bold mb-4">予約リスト</h1>
-      <button
-        className="bg-red-600 text-white px-4 py-2 rounded mb-4 hover:bg-red-700"
-        onClick={handleBulkDelete}
-        disabled={selectedReservations.size === 0}
-      >
-        選択した予約をまとめて削除
-      </button>
+    <div className="container mx-auto p-6">
+      <h1 className="text-3xl font-bold text-center mb-6">予約管理画面（削除ボタン復活）</h1>
+
+      {/* 🔹 削除ボタン */}
+      <div className="mb-4">
+        <button
+          onClick={handleDeleteSelected}
+          className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-700"
+        >
+          選択した予約を削除 🗑️
+        </button>
+      </div>
+
       <table className="w-full border-collapse border border-gray-300">
         <thead>
-          <tr className="bg-gray-200">
-            <th className="border border-gray-300 p-2">選択</th>
-            <th className="border border-gray-300 p-2">受付番号</th>
-            <th className="border border-gray-300 p-2">名前</th>
-            <th className="border border-gray-300 p-2">生年月日</th>
-            <th className="border border-gray-300 p-2">受付時間</th>
-            <th className="border border-gray-300 p-2">受付状態</th>
-            <th className="border border-gray-300 p-2">操作</th>
+          <tr className="bg-gray-100">
+            <th className="border p-2">✔</th>
+            <th className="border p-2 cursor-pointer" onClick={() => handleSort("receptionNumber")}>
+              受付番号 {sortConfig.key === "receptionNumber" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th className="border p-2 cursor-pointer" onClick={() => handleSort("createdAt")}>
+              受付時刻 {sortConfig.key === "createdAt" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th className="border p-2 cursor-pointer" onClick={() => handleSort("type")}>
+              初診/再診 {sortConfig.key === "type" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th className="border p-2 cursor-pointer" onClick={() => handleSort("status")}>
+              状態 {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+            </th>
           </tr>
         </thead>
         <tbody>
           {reservations.map((reservation) => (
-            <tr key={reservation.id} className={`border border-gray-300 ${getStatusColor(reservation.status)}`}>
-              <td className="border border-gray-300 p-2">
+            <tr key={reservation.id} className="border">
+              <td className="border p-2 text-center">
                 <input
                   type="checkbox"
-                  checked={selectedReservations.has(reservation.id)}
-                  onChange={() => toggleSelection(reservation.id)}
+                  checked={selectedReservations.includes(reservation.id)}
+                  onChange={() => handleSelectReservation(reservation.id)}
                 />
               </td>
-              <td className="border border-gray-300 p-2">{reservation.reservationNumber}</td>
-              <td className="border border-gray-300 p-2">{reservation.name}</td>
-              <td className="border border-gray-300 p-2">{reservation.birthdate.toLocaleDateString()}</td>
-              <td className="border border-gray-300 p-2">{reservation.timestamp.toLocaleString()}</td>
-              <td className="border border-gray-300 p-2">
-                <select
-                  className="border p-2 rounded"
-                  value={reservation.status}
-                  onChange={(e) => handleStatusChange(reservation.id, e.target.value)}
-                >
-                  <option value="受付済み">受付済み</option>
-                  <option value="診察待ち">診察待ち</option>
+              <td className="border p-2 text-center">{reservation.receptionNumber}</td>
+              <td className="border p-2 text-center">
+                {reservation.createdAt ? new Date(reservation.createdAt.toDate()).toLocaleString() : "未登録"}
+              </td>
+              <td className={`border p-2 text-center ${getTypeColor(reservation.type)}`}>
+                {reservation.type}
+              </td>
+              <td className={`border p-2 text-center ${getStatusColor(reservation.status)}`}>
+                <select value={reservation.status || "未受付"} onChange={(e) => handleStatusChange(reservation.id, e.target.value)} className="border p-1">
+                  <option value="未受付">未受付</option>
+                  <option value="受付済">受付済</option>
                   <option value="呼び出し中">呼び出し中</option>
                   <option value="診察中">診察中</option>
-                  <option value="会計待ち">会計待ち</option>
                   <option value="診察終了">診察終了</option>
+                  <option value="キャンセル済み">キャンセル済み</option>
                 </select>
-              </td>
-              <td className="border border-gray-300 p-2">
-                <button
-                  className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                  onClick={() => handleDelete(reservation.id)}
-                >
-                  削除
-                </button>
               </td>
             </tr>
           ))}
@@ -162,4 +184,6 @@ export default function Admin() {
       </table>
     </div>
   );
-}
+};
+
+export default AdminPage;
