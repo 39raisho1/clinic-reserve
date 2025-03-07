@@ -137,18 +137,14 @@ const AdminPage = () => {
         <thead>
           <tr className="bg-gray-100">
             <th className="border p-2">✔</th>
-            <th className="border p-2 cursor-pointer" onClick={() => handleSort("receptionNumber")}>
-              受付番号 {sortConfig.key === "receptionNumber" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
-            </th>
-            <th className="border p-2 cursor-pointer" onClick={() => handleSort("createdAt")}>
-              受付時刻 {sortConfig.key === "createdAt" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
-            </th>
-            <th className="border p-2 cursor-pointer" onClick={() => handleSort("type")}>
-              初診/再診 {sortConfig.key === "type" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
-            </th>
-            <th className="border p-2 cursor-pointer" onClick={() => handleSort("status")}>
-              状態 {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
-            </th>
+            <th className="border p-2">受付番号</th>
+            <th className="border p-2">受付時刻</th>
+            <th className="border p-2">初診/再診</th>
+            <th className="border p-2">診察券番号</th>
+            <th className="border p-2">名前</th>
+            <th className="border p-2">生年月日</th>
+            <th className="border p-2">電話番号</th>
+            <th className="border p-2">状態</th>
           </tr>
         </thead>
         <tbody>
@@ -168,6 +164,10 @@ const AdminPage = () => {
               <td className={`border p-2 text-center ${getTypeColor(reservation.type)}`}>
                 {reservation.type}
               </td>
+              <td className="border p-2 text-center">{reservation.cardNumber || "なし"}</td>
+              <td className="border p-2">{reservation.name}</td>
+              <td className="border p-2 text-center">{reservation.birthdate || reservation.birthdateShort || "なし"}</td>
+              <td className="border p-2 text-center">{reservation.phone || "なし"}</td>
               <td className={`border p-2 text-center ${getStatusColor(reservation.status)}`}>
                 <select value={reservation.status || "未受付"} onChange={(e) => handleStatusChange(reservation.id, e.target.value)} className="border p-1">
                   <option value="未受付">未受付</option>
