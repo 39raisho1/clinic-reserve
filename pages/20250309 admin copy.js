@@ -23,23 +23,15 @@ export default function AdminPage() {
       console.log(`📡 Firestore から ${snapshot.docs.length} 件のデータを取得`);
   
       if (snapshot.docs.length > 0) {
-        let data = snapshot.docs.map(doc => {
-          const firestoreTimestamp = doc.data().createdAt;
-          const createdAt = firestoreTimestamp ? firestoreTimestamp.toDate() : new Date();
-
-          return {
-            id: doc.id,
-            ...doc.data(),
-            createdAt: createdAt, // 🔥 Firestore に保存されている「年月日＋時刻」
-            displayTime: createdAt.toLocaleTimeString("ja-JP", { 
-              hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false 
-            }) // 🔥 画面表示用の「時刻のみ (HH:MM:SS)」
-          };
-        });
-
+        let data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt ? doc.data().createdAt.toDate() : new Date(),
+        }));
+  
         console.log("📡 Firestoreから取得したデータ:", data);
         setReservations(data);
-
+  
         // 🔥 受付状態のカウントをリアルタイム更新
         const counts = {
           "未受付": data.filter(r => r.status === "未受付").length,
@@ -59,10 +51,9 @@ export default function AdminPage() {
         setTotalReservations(0);
       }
     });
-
+  
     return () => unsubscribe();
   }, []);
-
   
   
   const getStatusColor = (status) => {
@@ -75,7 +66,6 @@ export default function AdminPage() {
       default: return "";
     }
   };
-
   const getTypeColor = (type) => {
     switch (type) {
       case "初診": return "bg-blue-500"; // 初診予約ページと同じ青
