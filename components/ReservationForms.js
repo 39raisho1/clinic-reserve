@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { db } from "../firebaseConfig";
 import { collection, addDoc, getDocs } from "firebase/firestore";
 
-// 生年月日入力コンポーネント
+// 生年月日入力コンポーネント（カレンダーなし）
 const BirthdateInput = ({ onChange }) => {
   const [birthdate, setBirthdate] = useState("");
 
@@ -31,8 +31,8 @@ const BirthdateInput = ({ onChange }) => {
 
   return (
     <input
-      type="text"
-      inputMode="numeric"
+      type="text" // 🔥 カレンダーを無効化（date → text）
+      inputMode="numeric" // 🔥 スマホで数値キーボードを表示
       placeholder="YYYY/MM/DD"
       value={birthdate}
       onChange={(e) => formatDate(e.target.value)}
@@ -88,7 +88,7 @@ const ShoshinReservation = () => {
       <form className="flex flex-col gap-4 w-full max-w-md" onSubmit={handleSubmit}>
         <input type="text" placeholder="名前（カタカナ）" name="name" value={formData.name} onChange={handleChange} required className="border p-3 rounded-md w-full" />
         
-        {/* 生年月日入力をカスタムコンポーネントに変更 */}
+        {/* 🔥 生年月日入力をカスタムコンポーネントに変更（カレンダーなし） */}
         <BirthdateInput onChange={(value) => setFormData({ ...formData, birthdate: value })} />
         
         <input type="tel" placeholder="電話番号" name="phone" value={formData.phone} onChange={handleChange} required className="border p-3 rounded-md w-full" />
@@ -98,49 +98,4 @@ const ShoshinReservation = () => {
   );
 };
 
-// 再診予約フォーム（変更なし）
-const SaishinReservation = () => {
-  const [formData, setFormData] = useState({ name: "", cardNumber: "" });
-  const [message, setMessage] = useState("");
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const snapshot = await getDocs(collection(db, "reservations"));
-      const orderIndex = snapshot.empty ? 1 : snapshot.size + 1;
-  
-      await addDoc(collection(db, "reservations"), {
-        type: "再診",
-        name: formData.name,
-        cardNumber: formData.cardNumber || "",
-        receptionNumber: orderIndex,
-        orderIndex,
-        createdAt: new Date(),
-      });
-  
-      setMessage(`予約完了！受付番号: ${orderIndex}`);
-      setFormData({ name: "", cardNumber: "" });
-    } catch (error) {
-      console.error("Firestore 書き込みエラー:", error);
-      setMessage("予約に失敗しました。");
-    }
-  };
-
-  return (
-    <div className="flex flex-col items-center justify-center p-4 w-full max-w-lg mx-auto">
-      <h2 className="text-3xl font-bold text-center mb-4">再診予約</h2>
-      {message && <p className="text-center text-green-600">{message}</p>}
-      <form className="flex flex-col gap-4 w-full max-w-md" onSubmit={handleSubmit}>
-        <input type="text" placeholder="名前（カタカナ）" name="name" value={formData.name} onChange={handleChange} required className="border p-3 rounded-md w-full" />
-        <input type="text" placeholder="診察券番号（空欄可）" name="cardNumber" value={formData.cardNumber} onChange={handleChange} className="border p-3 rounded-md w-full" />
-        <button type="submit" className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-700">予約する</button>
-      </form>
-    </div>
-  );
-};
-
-export { ShoshinReservation, SaishinReservation };
+export { ShoshinReservation };
