@@ -43,7 +43,9 @@ export default function ShoshinPage() {
   
       console.log(`✅ 予約完了！受付番号: ${newReceptionNumber} (date: ${todayDate})`);
       setReceptionNumber(newReceptionNumber);
-      setFormData({ name: "", birthdate: "", phone: "", cardNumber: "" });
+      setFormData({ name: "", phone: "", cardNumber: "" });
+  
+      fetchCallingPatients();
     } catch (error) {
       console.error("❌ Firestore へのデータ追加エラー:", error);
       alert("予約に失敗しました。もう一度試してください。");
@@ -52,12 +54,13 @@ export default function ShoshinPage() {
   
 
   // 🔥 Firestore から「呼び出し中の患者情報」を取得（番号順に並べる）
+  // 🔥 Firestore から「呼び出し中の患者情報」を取得（番号順に並べる）
   const fetchCallingPatients = async () => {
     console.log("📡 Firestore から呼び出し中の患者情報を取得");
 
     const callQuery = query(
       collection(db, "reservations"),
-      where("status", "==", "呼び出し中")
+      where("status", "==", "呼び出し中") // 🔥 `orderBy()` を使わず `sort()` で昇順に並べる
     );
 
     try {
@@ -69,8 +72,6 @@ export default function ShoshinPage() {
 
       // 🔥 `receptionNumber` の昇順に並べ替え
       callList.sort((a, b) => a.receptionNumber - b.receptionNumber);
-
-      console.log("📡 Firestore から取得したデータ（並べ替え後）:", callList); // 🔥 デバッグ用
 
       if (callList.length > 0) {
         setCallingPatients(callList);

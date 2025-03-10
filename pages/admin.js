@@ -260,10 +260,7 @@ const updateMaxReservations = async () => {
     console.error("❌ Firestore へのデータ更新エラー:", error);
   }
 };
-
-
-  
-  
+ 
   
   const [statusCounts, setStatusCounts] = useState({}); // 🔥 受付状態のカウント
 const [totalReservations, setTotalReservations] = useState(0); // 🔥 合計予約数
@@ -354,7 +351,6 @@ const handleDeleteSelected = async () => {
   };
   
   
-
 {/* 🔥 現在の予約受付状態を表示 */}
 <p className="text-lg text-center font-bold mt-4">
   現在の予約受付状態:{" "}
@@ -415,7 +411,69 @@ const handleDeleteSelected = async () => {
       console.error("❌ 予約の追加に失敗しました:", error);
     }
   };
-  
+  // 🔥 予約の個別削除
+const handleDelete = async (id) => {
+  if (!window.confirm("本当にこの予約を削除しますか？")) {
+    return;
+  }
+
+  try {
+    await deleteDoc(doc(db, "reservations", id)); // Firestore から削除
+
+    setReservations((prevReservations) =>
+      prevReservations.filter((reservation) => reservation.id !== id)
+    );
+
+    alert("予約を削除しました。");
+  } catch (error) {
+    console.error("❌ 予約削除エラー:", error);
+    alert("エラーが発生しました。削除できませんでした。");
+  }
+};
+// 🔥 個別ログ削除
+const handleDeleteLog = async (id) => {
+  if (!window.confirm("本当にこのログを削除しますか？")) {
+    return;
+  }
+
+  try {
+    await deleteDoc(doc(db, "logs", id)); // Firestore からログ削除
+
+    setLogs((prevLogs) =>
+      prevLogs.filter((log) => log.id !== id)
+    );
+
+    alert("ログを削除しました。");
+  } catch (error) {
+    console.error("❌ ログ削除エラー:", error);
+    alert("エラーが発生しました。削除できませんでした。");
+  }
+};
+
+// 🔥 全ログ削除
+const handleDeleteAllLogs = async () => {
+  if (!window.confirm("⚠️ 本当にすべてのログを削除しますか？ この操作は元に戻せません！")) {
+    return;
+  }
+
+  try {
+    const querySnapshot = await getDocs(collection(db, "logs")); // Firestore のログ取得
+
+    if (querySnapshot.empty) {
+      alert("削除できるログがありません。");
+      return;
+    }
+
+    await Promise.all(querySnapshot.docs.map(doc => deleteDoc(doc.ref))); // すべて削除
+
+    setLogs([]); // ローカルのログ一覧もリセット
+    alert("すべてのログを削除しました。");
+  } catch (error) {
+    console.error("❌ 全ログ削除エラー:", error);
+    alert("エラーが発生しました。削除できませんでした。");
+  }
+};
+
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold text-center mb-6">けんおう皮フ科クリニック 予約管理</h1>
@@ -432,7 +490,7 @@ const handleDeleteSelected = async () => {
     <th className="border p-2">名前</th>
     <th className="border p-2">生年月日</th>
     <th className="border p-2">電話番号</th>
-    <th className="border p-2">選択</th>
+    <th className="border p-2">予約削除</th>
   </tr>
 </thead>
 
@@ -463,12 +521,19 @@ const handleDeleteSelected = async () => {
               <td className="border p-2 text-center">{reservation.birthdate || "なし"}</td>
               <td className="border p-2 text-center">{reservation.phone || "なし"}</td>
               <td className="border p-2 text-center">
-                <input type="checkbox" checked={selectedReservations.includes(reservation.id)} onChange={(e) => {
-                  setSelectedReservations(e.target.checked
-                    ? [...selectedReservations, reservation.id]
-                    : selectedReservations.filter(id => id !== reservation.id));
-                }} />
-              </td>
+  <input type="checkbox" checked={selectedReservations.includes(reservation.id)} onChange={(e) => {
+    setSelectedReservations(e.target.checked
+      ? [...selectedReservations, reservation.id]
+      : selectedReservations.filter(id => id !== reservation.id));
+  }} />
+</td>
+
+<td className="border p-2 text-center">
+  <button onClick={() => handleDelete(reservation.id)} className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-700">
+    削除
+  </button>
+</td>
+
             </tr>
           ))}
         </tbody>
@@ -555,26 +620,38 @@ const handleDeleteSelected = async () => {
   <h2 className="text-2xl font-bold mb-4">予約システムのログ</h2>
 
   <table className="w-full border-collapse border border-gray-300">
-    <thead>
-      <tr className="bg-gray-100">
-        <th className="border p-2">操作内容</th>
-        <th className="border p-2">日時</th>
-        <th className="border p-2">詳細</th>
-      </tr>
-    </thead>
-    <tbody>
-      {logs.map((log) => (
-        <tr key={log.id} className="border">
-          <td className="border p-2">{log.action}</td>
-          <td className="border p-2">{log.timestamp}</td>
-          <td className="border p-2">{log.details}</td>
-        </tr>
-      ))}
-    </tbody>
+  <thead>
+  <tr className="bg-gray-100">
+    <th className="border p-2">操作内容</th>
+    <th className="border p-2">日時</th>
+    <th className="border p-2">詳細</th>
+    <th className="border p-2">削除</th>  {/* 🔥 ここを追加！ */}
+  </tr>
+</thead>
+
+<tbody>
+  {logs.map((log) => (
+    <tr key={log.id} className="border">
+      <td className="border p-2">{log.action}</td>
+      <td className="border p-2">{log.timestamp}</td>
+      <td className="border p-2">{log.details}</td>
+      <td className="border p-2 text-center">
+        <button onClick={() => handleDeleteLog(log.id)} className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-700">
+          削除
+        </button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+
   </table>
 </div>
 
-
+<div className="mb-4">
+  <button onClick={handleDeleteAllLogs} className="px-4 py-2 bg-red-700 text-white rounded-md hover:bg-red-900">
+    🚨 すべてのログを削除
+  </button>
+</div>
 
     </div>
   );
