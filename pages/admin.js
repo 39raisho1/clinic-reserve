@@ -411,25 +411,7 @@ const handleDeleteSelected = async () => {
       console.error("❌ 予約の追加に失敗しました:", error);
     }
   };
-  // 🔥 予約の個別削除
-const handleDelete = async (id) => {
-  if (!window.confirm("本当にこの予約を削除しますか？")) {
-    return;
-  }
 
-  try {
-    await deleteDoc(doc(db, "reservations", id)); // Firestore から削除
-
-    setReservations((prevReservations) =>
-      prevReservations.filter((reservation) => reservation.id !== id)
-    );
-
-    alert("予約を削除しました。");
-  } catch (error) {
-    console.error("❌ 予約削除エラー:", error);
-    alert("エラーが発生しました。削除できませんでした。");
-  }
-};
 // 🔥 個別ログ削除
 const handleDeleteLog = async (id) => {
   if (!window.confirm("本当にこのログを削除しますか？")) {
@@ -528,11 +510,6 @@ const handleDeleteAllLogs = async () => {
   }} />
 </td>
 
-<td className="border p-2 text-center">
-  <button onClick={() => handleDelete(reservation.id)} className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-700">
-    削除
-  </button>
-</td>
 
             </tr>
           ))}

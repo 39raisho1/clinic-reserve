@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+/* 🔥 クリック時の点滅を完全になくす */
+* {
+  outline: none !important;
+}
+
+td, tr {
+  outline: none !important;
+  user-select: none; /* 不要なら削除 */
+}
+/* すべての要素のフォーカス時の点滅を完全に無効化 */
+*:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* テーブルセル（td, tr）がクリックされてもフォーカスしない */
+td, tr {
+  user-select: none !important;
+  pointer-events: auto !important;
+}
