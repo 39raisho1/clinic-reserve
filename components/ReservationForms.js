@@ -1,57 +1,36 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { db } from "../firebaseConfig";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, getDoc, orderBy } from "firebase/firestore";
+import BirthdateInput from "../components/BirthdateInput";
+import Link from "next/link";
 
-// 生年月日入力コンポーネント（カレンダーなし）
-const BirthdateInput = ({ onChange }) => {
-  const [birthdate, setBirthdate] = useState("");
+export default function ReservationForm({ type }) {
+  const [formData, setFormData] = useState({ name: "", birthdate: "", phone: "", cardNumber: "" });
+  const [receptionNumber, setReceptionNumber] = useState(null);
+  const [isFull, setIsFull] = useState(false); // 🔥 予約上限チェック
+  const [loading, setLoading] = useState(true);
 
-  const formatDate = (input) => {
-    input = input.replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 65248)); // 全角を半角に変換
-    let numbersOnly = input.replace(/\D/g, ""); // 数字以外を削除
-    if (numbersOnly.length > 8) numbersOnly = numbersOnly.slice(0, 8);
+  // 🔥 Firestore から予約上限を取得し、本日の予約数と比較
+  useEffect(() => {
+    const checkReservationLimit = async () => {
+      try {
+        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+        const q = query(collection(db, "reservations"), where("date", "==", today));
+        const snapshotReservations = await getDocs(q);
+        const todayReservations = snapshotReservations.size;
+    
+        console.log(`📡 予約数チェック: ${todayReservations} / ${maxReservations}`);
+    
+        setIsFull(todayReservations >= maxReservations);
+        console.log(`✅ isFull の値更新: ${todayReservations >= maxReservations}`);
+      } catch (error) {
+        console.error("❌ Firestore からのデータ取得エラー:", error);
+      }
+    };
+    
 
-    let formatted = numbersOnly;
-    if (numbersOnly.length >= 4) formatted = numbersOnly.slice(0, 4) + "/";
-    if (numbersOnly.length >= 6) formatted += numbersOnly.slice(4, 6) + "/";
-    if (numbersOnly.length >= 8) formatted += numbersOnly.slice(6, 8);
-
-    setBirthdate(formatted);
-    onChange(formatted);
-  };
-
-  const validateDate = (dateStr) => {
-    const match = dateStr.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-    if (!match) return false;
-    const [_, year, month, day] = match.map(Number);
-    const inputDate = new Date(year, month - 1, day);
-    if (inputDate.getFullYear() !== year || inputDate.getMonth() + 1 !== month || inputDate.getDate() !== day) return false;
-    return inputDate <= new Date();
-  };
-
-  return (
-    <input
-      type="text" // 🔥 カレンダーを無効化（date → text）
-      inputMode="numeric" // 🔥 スマホで数値キーボードを表示
-      placeholder="YYYY/MM/DD"
-      value={birthdate}
-      onChange={(e) => formatDate(e.target.value)}
-      onBlur={() => {
-        if (!validateDate(birthdate)) {
-          alert("無効な日付です。正しい生年月日を入力してください。");
-          setBirthdate("");
-        }
-      }}
-      maxLength={10}
-      className="border p-3 rounded-md w-full"
-    />
-  );
-};
-
-// 初診予約フォーム
-const ShoshinReservation = () => {
-  const [formData, setFormData] = useState({ name: "", birthdate: "", phone: "" });
-  const [message, setMessage] = useState("");
+    checkReservationLimit();
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -59,43 +38,88 @@ const ShoshinReservation = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    console.log(`📡 予約の日付 (date): ${todayDate}`); // 🔥 `date` の値をデバッグ
+    
+
+    // 🔥 予約上限チェック
+    if (isFull) {
+      alert("本日の予約上限に達しました。別の日をお選びください。");
+      return;
+    }
+
     try {
-      const snapshot = await getDocs(collection(db, "reservations"));
-      const orderIndex = snapshot.empty ? 1 : snapshot.size + 1;
-  
+      console.log("📡 予約データを取得...");
+      const q = query(collection(db, "reservations"), orderBy("receptionNumber", "desc"));
+      const snapshot = await getDocs(q);
+      const newReceptionNumber = snapshot.empty ? 1 : (snapshot.docs[0].data()?.receptionNumber || 0) + 1;
+      const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      console.log(`📡 予約の日付 (date): ${todayDate}`); // 🔥 `date` の値をデバッグ
+      
       await addDoc(collection(db, "reservations"), {
-        type: "初診",
+        type,
         name: formData.name,
-        birthdate: formData.birthdate, // 🔥 生年月日を保存
+        birthdate: formData.birthdate,
         phone: formData.phone,
-        receptionNumber: orderIndex,
-        orderIndex,
-        createdAt: new Date(),
+        cardNumber: formData.cardNumber || "",
+        receptionNumber: newReceptionNumber,
+        date: todayDate, // 🔥 予約の日付を `YYYY-MM-DD` 形式で保存
+        status: "未受付",
+        createdAt: serverTimestamp(),
       });
-  
-      setMessage(`予約完了！受付番号: ${orderIndex}`);
-      setFormData({ name: "", birthdate: "", phone: "" }); // フォームリセット
+      
+      
+
+      setReceptionNumber(newReceptionNumber);
+      console.log(`✅ 予約完了！受付番号: ${newReceptionNumber}`);
+      setFormData({ name: "", birthdate: "", phone: "", cardNumber: "" });
+
+      // 🔥 予約完了後に Firestore の最新データを取得し、予約上限を再チェック
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
-      console.error("Firestore 書き込みエラー:", error);
-      setMessage("予約に失敗しました。");
+      console.error("❌ Firestore へのデータ追加エラー:", error);
+      alert("予約に失敗しました。もう一度試してください。");
     }
   };
 
   return (
     <div className="flex flex-col items-center justify-center p-4 w-full max-w-lg mx-auto">
-      <h2 className="text-3xl font-bold text-center mb-4">初診予約</h2>
-      {message && <p className="text-center text-green-600">{message}</p>}
-      <form className="flex flex-col gap-4 w-full max-w-md" onSubmit={handleSubmit}>
-        <input type="text" placeholder="名前（カタカナ）" name="name" value={formData.name} onChange={handleChange} required className="border p-3 rounded-md w-full" />
-        
-        {/* 🔥 生年月日入力をカスタムコンポーネントに変更（カレンダーなし） */}
-        <BirthdateInput onChange={(value) => setFormData({ ...formData, birthdate: value })} />
-        
-        <input type="tel" placeholder="電話番号" name="phone" value={formData.phone} onChange={handleChange} required className="border p-3 rounded-md w-full" />
-        <button type="submit" className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-700">予約する</button>
-      </form>
+      <h2 className="text-3xl font-bold text-center">けんおう皮フ科クリニック</h2>
+      <h3 className="text-2xl font-semibold text-center">{type} 予約</h3>
+
+      {isFull ? (
+        <p className="text-xl text-red-600 font-bold">⛔ 本日の予約は満員です。</p>
+      ) : receptionNumber ? (
+        <div className="text-center">
+          <p className="text-lg font-bold">予約が完了しました！</p>
+          <p className="text-6xl font-extrabold text-blue-500 mt-4">{receptionNumber}</p>
+          <div className="mt-6">
+            <Link href="/">
+              <div className="px-8 py-4 bg-blue-500 text-white text-center text-2xl font-bold rounded-lg hover:bg-blue-700 shadow-lg cursor-pointer">
+                予約トップに戻る
+              </div>
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <form className="flex flex-col gap-6 w-full max-w-md" onSubmit={handleSubmit}>
+          <input type="text" placeholder="名前（カタカナ）" name="name" value={formData.name} onChange={handleChange} required className="border p-4 rounded-md w-full text-lg" />
+          <BirthdateInput onChange={(value) => setFormData({ ...formData, birthdate: value })} />
+          <input type="tel" placeholder="電話番号" name="phone" value={formData.phone} onChange={handleChange} required className="border p-4 rounded-md w-full text-lg" />
+          <button
+            type="submit"
+            className={`px-8 py-6 text-2xl font-bold rounded-lg shadow-lg ${
+              isFull ? "bg-gray-400 text-gray-600 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-700"
+            }`}
+            disabled={isFull}
+          >
+            予約する
+          </button>
+        </form>
+      )}
     </div>
   );
-};
-
-export { ShoshinReservation };
+}

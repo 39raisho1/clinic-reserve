@@ -8,19 +8,30 @@ export default function CallScreen() {
   useEffect(() => {
     console.log("📡 Firestore 監視を開始...");
 
-    // 🔹 Firestore の `reservations` コレクションをリアルタイム監視（orderBy を削除）
+    // 🔹 Firestore の `reservations` コレクションをリアルタイム監視
     const callQuery = query(
       collection(db, "reservations"),
       where("status", "==", "呼び出し中")
     );
 
     const unsubscribeCall = onSnapshot(callQuery, (snapshot) => {
-      const callList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let callList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        receptionNumber: typeof doc.data().receptionNumber === "number" 
+          ? doc.data().receptionNumber 
+          : parseInt(doc.data().receptionNumber) || 9999 // 🔥 文字列を数値に変換
+      }));
+
+      // 🔹 受付番号の昇順にソート
+      callList.sort((a, b) => a.receptionNumber - b.receptionNumber);
+
       console.log("📡 呼び出し中の患者一覧:", callList);
       setCurrentCalls(callList);
     });
 
     return () => {
+      console.log("📡 Firestore 監視を解除");
       unsubscribeCall();
     };
   }, []);

@@ -1,17 +1,17 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAWzVE-1j_gXlWGw623o81D01ZJjP75L9I",
-    authDomain: "kenohyoyaku.firebaseapp.com",
-    projectId: "kenohyoyaku",
-    storageBucket: "kenohyoyaku.firebasestorage.app",
-    messagingSenderId: "607743779176",
-    appId: "1:607743779176:web:9e43e2ccf38684604fb6dd"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Firebase を初期化
-const app = initializeApp(firebaseConfig);
+// ✅ Firebase アプリが既に存在する場合は、それを取得（エラー回避）
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export { db };
