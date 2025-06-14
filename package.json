@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "init:settings": "node scripts/initSettings.js"
   },
   "dependencies": {
     "firebase": "^11.4.0",
@@ -17,9 +18,15 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@eslint/js": "^9.28.0",
     "@tailwindcss/postcss": "^4",
-    "eslint": "^9",
+    "eslint": "^9.28.0",
     "eslint-config-next": "15.2.1",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.2.0",
+    "prettier": "^3.5.3",
     "tailwindcss": "^4"
   }
 }

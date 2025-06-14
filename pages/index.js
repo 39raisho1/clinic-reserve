@@ -1,73 +1,30 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { db } from "../firebaseConfig";
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { collection, query, where, doc,getDocs,onSnapshot } from "firebase/firestore";
 
 export default function Home() {
   const [callingPatients, setCallingPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isReservationOpen, setIsReservationOpen] = useState(true); // 🔥 予約受付の状態
   const [isFull, setIsFull] = useState(false); // 🔥 予約上限チェック
-  const [maxReservations, setMaxReservations] = useState(10); // 🔥 予約上限を保存
+  const [maxReservations, setMaxReservations] = useState(null);
   
-  // 🔥 Firestore から「予約受付の状態」を取得
-  useEffect(() => {
-    const fetchReservationStatus = async () => {
-      const settingsRef = doc(db, "settings", "clinic");
-      const snapshot = await getDoc(settingsRef);
-      if (snapshot.exists()) {
-        setIsReservationOpen(snapshot.data().isReservationOpen);
-      }
-    };
-    fetchReservationStatus();
-  }, []);
 
   // 🔥 Firestore の「予約患者上限数」を取得
-  useEffect(() => {
-    const settingsRef = doc(db, "settings", "clinic");
-  
-    const unsubscribe = onSnapshot(settingsRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const newMaxReservations = docSnapshot.data().maxReservationsPerDay || 10;
-        setMaxReservations(newMaxReservations);
-        console.log(`📡 Firestore 更新: maxReservationsPerDay = ${newMaxReservations}`); // 🔥 取得した値を確認
-      } else {
-        console.warn("⚠️ Firestore に `maxReservationsPerDay` のデータがありません！");
-      }
-    });
-  
-    return () => unsubscribe();
-  }, []);
-  // デバッグ
-  useEffect(() => {
-    console.log(`✅ デバッグ: maxReservations = ${maxReservations}`);
-  }, [maxReservations]);
-  
+// ① 設定ドキュメント（isReservationOpen と maxReservations）を購読
+useEffect(() => {
+  const settingsRef = doc(db, "settings", "clinic");
+  const unsub = onSnapshot(settingsRef, snap => {
+    if (!snap.exists()) return;
+    const { isReservationOpen, maxReservationsPerDay } = snap.data();
+    setIsReservationOpen(isReservationOpen);
+    setMaxReservations(maxReservationsPerDay ?? 10);
+  });
+  return () => unsub();
+}, []);
 
-  // 🔥 Firestore の「予約患者上限数」をチェック
-  useEffect(() => {
-    const checkReservationLimit = async () => {
-      try {
-        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-        const q = query(collection(db, "reservations"), where("date", "==", today));
-        const snapshotReservations = await getDocs(q);
-        const todayReservations = snapshotReservations.size;
-  
-        console.log(`📡 予約数チェック: ${todayReservations} / ${maxReservations}`);
-        
-        const isFullStatus = todayReservations >= maxReservations;
-        setIsFull(isFullStatus);
-        console.log(`✅ isFull の値更新: ${isFullStatus}`);
-        
-      } catch (error) {
-        console.error("❌ Firestore からのデータ取得エラー:", error);
-      }
-    };
-  
-    checkReservationLimit();
-  }, [maxReservations]); // 🔥 `maxReservations` が変わるたびにチェック
-  
-  // デバッグ
+
   useEffect(() => {
     console.log(`✅ デバッグ用: isFull = ${isFull}, maxReservations = ${maxReservations}`);
   }, [isFull, maxReservations]);
@@ -134,16 +91,15 @@ export default function Home() {
           <p className="text-gray-500 mt-4 text-xl">現在呼び出し中の方はいません</p>
         )}
       </div>
-      
-      {/* 🔥 予約満員時のメッセージ表示 */}
-      {isFull && (
-  <p className="text-xl text-red-600 font-bold">⛔ 本日の予約は満員です。</p>
-)}
 
-      {/* 🔥 予約停止時のメッセージ表示 */}
-      {!isReservationOpen && (
-        <p className="text-xl text-red-600 font-bold mt-6">⛔ 現在、予約受付を停止しています。</p>
-      )}
+      
+ {/* 🔥 受付停止 or 満員のメッセージ */}
+ {(!loading && (isFull || !isReservationOpen)) && (
+   <p className="text-xl text-red-600 font-bold mt-6">
+     ⛔ 現在、予約受付を停止しています。
+     {isFull && " 本日の予約上限に達しました。"}
+   </p>
+ )}
 
       <div className="flex flex-col gap-8 w-full max-w-md mt-6">
         {/* 🔹 予約ボタン（予約受付がONのときのみ表示） */}
@@ -151,12 +107,12 @@ export default function Home() {
           <>
             <Link href="/shoshin">
               <div className="px-8 py-6 bg-blue-500 text-white text-center text-2xl font-bold rounded-lg hover:bg-blue-700 shadow-lg cursor-pointer">
-                初診予約はこちら
+                初めての方
               </div>
             </Link>
             <Link href="/saishin">
               <div className="px-8 py-6 bg-green-500 text-white text-center text-2xl font-bold rounded-lg hover:bg-green-700 shadow-lg cursor-pointer">
-                再診予約はこちら
+                以前受診されたことのある方
               </div>
             </Link>
           </>
@@ -169,6 +125,20 @@ export default function Home() {
           </div>
         </Link>
       </div>
+<br></br>
+当院の診察は当日のみの順番予約制となります。<br></br>
+診察順番予約は予約可能時間内のみ順番で予約をお取りすることができます。<br></br>
+<br></br>
+ <br></br>
+
+月、木、金、土、日(月に1～2回)<br></br>
+午前 8時30分～12時30分<br></br>
+
+午後 14時30分～18時00分<br></br>
+ <br></br>
+診療時間外にはご予約をお取りできません。<br></br>
+当日午前または午後の予約人数が上限に達しますと、予約受付が停止いたします。<br></br>
+予約人数が上限に達し、予約停止後でも、診療時間内に直接ご来院いただければ診察いたします。<br></br>
     </div>
   );
 }

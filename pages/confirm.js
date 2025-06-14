@@ -47,7 +47,7 @@ export default function ConfirmPage() {
     if (!confirmCancel) return;
 
     try {
-      await updateDoc(doc(db, "reservations", reservation.id), { status: "キャンセル済み" });
+      await updateDoc(doc(db, "reservations", reservation.id), { status: "キャンセル済" });
 
       setMessage(
         <div className="text-center mt-4">
