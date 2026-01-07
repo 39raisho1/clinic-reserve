@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { db } from "../firebaseConfig";
-import { collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp  } from "firebase/firestore";
+import Link from "next/link";
 
 export default function ConfirmPage() {
   const [formData, setFormData] = useState({ name: "", cardNumber: "" });
@@ -47,14 +48,25 @@ export default function ConfirmPage() {
     if (!confirmCancel) return;
 
     try {
-      await updateDoc(doc(db, "reservations", reservation.id), { status: "キャンセル済" });
+      await updateDoc(doc(db, "reservations", reservation.id), {
+       status:           "キャンセル済",
+       canceledAt:       serverTimestamp()   // （必要なければ省いてOK）
+     });
+await updateDoc(doc(db, "reservations", reservation.id), { status: "キャンセル済" });
 
       setMessage(
-        <div className="text-center mt-4">
-          <p className="text-2xl font-bold text-red-600">予約をキャンセルしました。</p>
-          <p className="text-lg text-gray-700 mt-2">必要であれば、もう一度予約をお願いいたします。</p>
-        </div>
-      );
+     <div className="flex flex-col items-center text-center space-y-4 mt-6">
+       <p className="text-2xl font-bold text-red-600">予約をキャンセルしました。</p>
+       <p className="text-lg text-gray-700">必要であれば、もう一度予約をお願いいたします。</p>
+       <Link
+   href="/"
+   className="inline-block px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-700"
+ >
+   トップページへ戻る
+</Link>
+     </div>
+   );
+
       setReservation(null);
       setFormData({ name: "", cardNumber: "" });
     } catch (error) {
@@ -70,9 +82,17 @@ export default function ConfirmPage() {
       <div className="mb-4">&nbsp;</div>
       <h3 className="text-2xl font-semibold text-center">予約確認 & キャンセル</h3>
 
-      {message && <div className="text-center mt-4">{message}</div>}
+{/* キャンセル完了メッセージがあるときだけ表示 */}
+     {message && (
+       <div className="text-center mt-4">
+         {message}
+       </div>
+     )}
 
-      {!reservation ? (
+
+
+ {/* messageがない＆reservationもないときだけ、検索フォームを表示 */}
+      {!message && !reservation && (
         <form className="flex flex-col gap-4 w-full max-w-md" onSubmit={handleSearch}>
           <input
             type="text"
@@ -94,8 +114,12 @@ export default function ConfirmPage() {
           <button type="submit" className="w-full py-3 text-white bg-blue-500 rounded-lg hover:bg-blue-700 text-lg">
             予約を検索
           </button>
-        </form>
-      ) : (
+          
+ </form>
+      )}
+
+      {/* messageがない＆reservationがあるときだけ、予約詳細＋キャンセルボタンを表示 */}
+      {!message && reservation && (
         <div className="text-center">
           <p className="text-lg font-bold">予約情報</p>
           <p className="text-6xl font-extrabold text-blue-500 mt-4">{reservation.receptionNumber}</p>

@@ -1,110 +1,220 @@
 // src/services/reservationService.js
+
 import { db } from "../../firebaseConfig";
 import {
   doc,
   runTransaction,
   serverTimestamp,
   collection,
-  getDocs,
   query,
-  where,
+  getDocs,
   orderBy,
-  limit
+  limit,
+  documentId,
 } from "firebase/firestore";
+import { nowJST, isoDateKey } from "../../utils/timeJST";
 
-/**
- * 通常予約 (6の倍数を飛ばす)
- */
-export async function createReservation(data) {
-  const today           = data.date;   // YYYY-MM-DD
-  const counterRef      = doc(db, "counters", "reservation");
-  const dailyCounterRef = doc(db, "dailyCounters", today);
-  const reservationsCol = collection(db, "reservations");
-  const newDocRef       = doc(reservationsCol);
-
-  const result = await runTransaction(db, async (tx) => {
-    // ── (1) グローバルカウンターを取得 ───────────────────
-    const snap     = await tx.get(counterRef);
-    let rawCount   = snap.exists() ? snap.data().count : 0;
-
-    // カウンターが未作成 or リセット(0)なら、既存予約から最大番号を拾う
-    if (!snap.exists() || rawCount === 0) {
-      const maxSnap = await getDocs(
-        query(reservationsCol, orderBy("receptionNumber", "desc"), limit(1))
-      );
-      if (!maxSnap.empty) {
-        rawCount = maxSnap.docs[0].data().receptionNumber;
-      }
-    }
-
-    // ── (2) 6の倍数を飛ばしつつ次の番号を計算 ────────────────
-    const baseCount = rawCount < 6 ? 6 : rawCount;
-    let nextGlobal  = baseCount + 1;
-    while (nextGlobal % 6 === 0) {
-      nextGlobal += 1;
-    }
-
-    // ── (3) 日次カウンター取得 ───────────────────────────
-    const dailySnap = await tx.get(dailyCounterRef);
-    const nextDaily = (dailySnap.exists() ? dailySnap.data().count : 0) + 1;
-
-    // ── (4) 予約ドキュメントを書き込み ──────────────────────
-    tx.set(newDocRef, {
-      ...data,
-      receptionNumber: nextGlobal,
-      createdAt:       serverTimestamp(),
-    });
-
-    // ── (5) counters/reservation & dailyCounters を更新 ─────
-    tx.set(counterRef,      { count: nextGlobal }, { merge: true });
-    tx.set(dailyCounterRef, { count: nextDaily },   { merge: true });
-
-    return { id: newDocRef.id, receptionNumber: nextGlobal };
-  });
-
-  return result;
+function getTodayISO(dateOverride) {
+  return dateOverride || isoDateKey(nowJST());
 }
 
-/**
- * VIP予約 (1001以上、重複と6の倍数もスキップ)
- */
-export async function createVIPReservation(data) {
-  const MIN_VIP         = 1001;
+// ★ ISO -> YYYYMMDD
+function dateKeyFromISO(dateKeyISO) {
+  return String(dateKeyISO || "").replace(/-/g, "");
+}
+
+// ... readBool/toPositiveIntOr/readDailyLimit/findSmallestFreeSafe はそのまま ...
+
+const slotDocId = (dateKeyISO, receptionNumber) => `${dateKeyISO}_${receptionNumber}`;
+
+function nextOnlineCandidate(n) {
+  let x = n;
+  while (x <= 1000 && x % 6 === 0) x += 1;
+  return x;
+}
+
+export async function createReservation(data) {
+  const now = nowJST();
+  const dateKeyISO = getTodayISO(data?.date);
+  const dateKey = dateKeyFromISO(dateKeyISO); // ★ここを修正
+
+  const freeNo = await findSmallestFreeSafe(dateKeyISO, "O");
+
+  const settingsRef = doc(db, "settings", "clinic");
+  const counterRef  = doc(db, "counters", dateKeyISO); // ★ISOに統一
   const reservationsCol = collection(db, "reservations");
 
-  // (A) 既存の1001以上の番号を全取得
-  const snap = await getDocs(
-    query(
-      reservationsCol,
-      where("receptionNumber", ">=", MIN_VIP)
-    )
-  );
-  const used = new Set(snap.docs.map(d => d.data().receptionNumber));
+  return await runTransaction(db, async (tx) => {
+    const settingsSnap = await tx.get(settingsRef);
+    const counterSnap  = await tx.get(counterRef);
 
-  // (B) 空いている最小番号を探す（かつ6の倍数もスキップ）
-  let nextVIP = MIN_VIP;
-  while (used.has(nextVIP) || nextVIP % 6 === 0) {
-    nextVIP += 1;
-  }
+    const settings = settingsSnap.exists() ? settingsSnap.data() || {} : {};
+    const isOpen   = readBool(settings.isReservationOpen, true);
 
-  // (C) トランザクションで書き込み（並列重複を防止）
-  const newRef = doc(reservationsCol);
-  await runTransaction(db, async tx => {
-    // 念のため同じチェックをトランザクション内でも
-    const verifySnap = await tx.get(query(
-      reservationsCol,
-      where("receptionNumber", "==", nextVIP),
-      limit(1)
-    ));
-    if (!verifySnap.empty) {
-      throw new Error(`VIP番号${nextVIP}は既に使われています`);
+    const until = settings.forceOpenUntil?.toDate?.() ?? null;
+    const forceActive = until ? now < until : false;
+
+    const limitNum = readDailyLimit(settings);
+    const counter  = counterSnap.exists() ? counterSnap.data() || {} : {};
+    const count    = Number(counter.count ?? 0);
+
+    if (!forceActive && !isOpen) throw new Error("受付停止中です");
+    if (!forceActive && limitNum > 0 && count >= limitNum) {
+      throw new Error(`本日の予約上限に達しました（${count}/${limitNum}）`);
     }
+
+    const rawCursor = Number(counter.nextOnline ?? 1);
+    const cursorNo  = nextOnlineCandidate(rawCursor);
+    if (cursorNo > 1000) throw new Error("本日のWEB予約番号枠が満杯です");
+
+    let candidateStart =
+      Number.isFinite(freeNo) && freeNo !== null && freeNo <= cursorNo
+        ? freeNo
+        : cursorNo;
+
+    candidateStart = nextOnlineCandidate(Math.max(1, candidateStart));
+    if (candidateStart > 1000) throw new Error("本日のWEB予約番号枠が満杯です");
+
+    let chosen = null;
+    let candidate = candidateStart;
+
+    for (let i = 0; i < 1200; i++) {
+      candidate = nextOnlineCandidate(candidate);
+      if (candidate > 1000) break;
+
+      const slotRef = doc(db, "reservationSlots", slotDocId(dateKeyISO, candidate));
+      const slotSnap = await tx.get(slotRef);
+
+      if (!slotSnap.exists()) {
+        chosen = candidate;
+        break;
+      }
+      candidate += 1;
+    }
+
+    if (chosen === null) throw new Error("本日のWEB予約番号枠が満杯です（空きが見つかりません）");
+
+    const patch = { count: count + 1 };
+
+    let nextBase = cursorNo;
+    if (chosen >= cursorNo) nextBase = chosen + 1;
+    patch.nextOnline = nextOnlineCandidate(nextBase);
+
+    tx.set(counterRef, patch, { merge: true });
+
+    const newRef = doc(reservationsCol);
     tx.set(newRef, {
       ...data,
-      receptionNumber: nextVIP,
-      createdAt:       serverTimestamp(),
+      dateKeyISO,
+      dateKey,
+      receptionNumber: chosen,
+      status: "予約済",
+      vip: false,
+      createdBy: "public",
+      createdAt: serverTimestamp(),
     });
-  });
 
-  return { id: newRef.id, receptionNumber: nextVIP };
+    const slotRef = doc(db, "reservationSlots", slotDocId(dateKeyISO, chosen));
+    tx.set(slotRef, {
+      dateKeyISO,
+      dateKey,
+      receptionNumber: chosen,
+      reservationId: newRef.id,
+      createdAt: serverTimestamp(),
+      createdBy: "public",
+      kind: "online",
+    });
+
+    return { id: newRef.id, receptionNumber: chosen };
+  });
+}
+
+export async function createVIPReservation(data) {
+  const now = nowJST();
+  const dateKeyISO = getTodayISO(data?.date);
+  const dateKey = dateKeyFromISO(dateKeyISO); // ★ここを修正
+
+  const freeNo = await findSmallestFreeSafe(dateKeyISO, "V");
+
+  const settingsRef = doc(db, "settings", "clinic");
+  const counterRef  = doc(db, "counters", dateKeyISO); // ★既にISOなのでOK（統一）
+  const reservationsCol = collection(db, "reservations");
+
+  return await runTransaction(db, async (tx) => {
+    const settingsSnap = await tx.get(settingsRef);
+    const counterSnap  = await tx.get(counterRef);
+
+    const settings = settingsSnap.exists() ? settingsSnap.data() || {} : {};
+    const isOpen   = readBool(settings.isReservationOpen, true);
+
+    const until = settings.forceOpenUntil?.toDate?.() ?? null;
+    const forceActive = until ? now < until : false;
+
+    const limitNum = readDailyLimit(settings);
+    const counter  = counterSnap.exists() ? counterSnap.data() || {} : {};
+    const count    = Number(counter.count ?? 0);
+
+    if (!forceActive && !isOpen) throw new Error("受付停止中です");
+    if (!forceActive && limitNum > 0 && count >= limitNum) {
+      throw new Error(`本日の予約上限に達しました（${count}/${limitNum}）`);
+    }
+
+    const cursorNo = Number(counter.nextVip ?? 1001);
+
+    let start =
+      Number.isFinite(freeNo) && freeNo !== null && freeNo <= cursorNo
+        ? freeNo
+        : cursorNo;
+
+    if (start < 1001) start = 1001;
+
+    let chosen = null;
+    let candidate = start;
+
+    for (let i = 0; i < 5000; i++) {
+      const slotRef = doc(db, "reservationSlots", slotDocId(dateKeyISO, candidate));
+      const slotSnap = await tx.get(slotRef);
+
+      if (!slotSnap.exists()) {
+        chosen = candidate;
+        break;
+      }
+      candidate += 1;
+    }
+
+    if (chosen === null) throw new Error("VIP番号枠が満杯です（空きが見つかりません）");
+
+    const patch = { count: count + 1 };
+
+    let nextBase = cursorNo;
+    if (chosen >= cursorNo) nextBase = chosen + 1;
+    patch.nextVip = nextBase;
+
+    tx.set(counterRef, patch, { merge: true });
+
+    const newRef = doc(reservationsCol);
+    tx.set(newRef, {
+      ...data,
+      dateKeyISO,
+      dateKey,
+      receptionNumber: chosen,
+      status: "予約済",
+      vip: true,
+      createdBy: "vip",
+      createdAt: serverTimestamp(),
+    });
+
+    const slotRef = doc(db, "reservationSlots", slotDocId(dateKeyISO, chosen));
+    tx.set(slotRef, {
+      dateKeyISO,
+      dateKey,
+      receptionNumber: chosen,
+      reservationId: newRef.id,
+      createdAt: serverTimestamp(),
+      createdBy: "vip",
+      kind: "vip",
+    });
+
+    return { id: newRef.id, receptionNumber: chosen };
+  });
 }

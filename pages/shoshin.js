@@ -1,223 +1,291 @@
-import React, { useState, useEffect } from "react";
+// pages/shoshin.js
+
+import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { db } from "../firebaseConfig";
 import {
   collection,
-  addDoc,
-  getDocs,
+  doc,
+  onSnapshot,
   query,
   where,
-  serverTimestamp,
-  doc,
-  onSnapshot
+  getDocs,
+  Timestamp,
 } from "firebase/firestore";
-import BirthdateInput from "../components/BirthdateInput"; // 🔥 生年月日入力コンポーネント
-import Link from "next/link";
+import BirthdateInput from "../components/BirthdateInput";
+import { createReservation } from "../src/services/reservationService";
+import { nowJST } from "../utils/timeJST";
+
+const readBool = (v, fallback) => (v === true ? true : v === false ? false : fallback);
+const toNum = (v, fb = 0) => (Number.isFinite(Number(v)) ? Number(v) : fb);
+
+const getDayRangeJST = (now) => {
+  const s = new Date(now);
+  s.setHours(0, 0, 0, 0);
+  const e = new Date(now);
+  e.setHours(24, 0, 0, 0);
+  return { s, e };
+};
 
 export default function ShoshinPage() {
-  const [formData, setFormData] = useState({ name: "", birthdate: "", phone: "" });
+  const [formData, setFormData] = useState({
+    name: "",
+    birthdate: "",
+    phone: "",
+  });
+
   const [receptionNumber, setReceptionNumber] = useState(null);
   const [callingPatients, setCallingPatients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ─── 追加 ─────────────────────────────────────────────────────────
-  // 上限チェック用 state
-  // 午前／午後別の上限を保持する state
- const [maxMorning, setMaxMorning]     = useState(null);
- const [maxAfternoon, setMaxAfternoon] = useState(null);
-  const [isFull, setIsFull] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [isReservationOpen, setIsReservationOpen] = useState(true);
+  const [maxPerDay, setMaxPerDay] = useState(0);
+  const [forceOpenUntil, setForceOpenUntil] = useState(null);
+  const [forceOpenActive, setForceOpenActive] = useState(false);
 
-// ① settings/clinic から午前／午後の上限をリアルタイム購読
- useEffect(() => {
-  const settingsRef = doc(db, "settings", "clinic");
-  const unsub = onSnapshot(settingsRef, snap => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    setMaxMorning(   data.maxReservationsMorning   ?? 10);
-    setMaxAfternoon( data.maxReservationsAfternoon ?? 10);
-  });
-  return () => unsub();
-}, []);
+  const [countLoaded, setCountLoaded] = useState(false);
+  const [todayCount, setTodayCount] = useState(0);
 
- // ② 午前／午後別上限がロードされたら当日の予約数をリアルタイム監視
- useEffect(() => {
-  // まだ読み込まれていなければ何もしない
-  if (maxMorning === null || maxAfternoon === null) return;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // 今日の日付
-  const today = new Date().toISOString().split("T")[0];
-  const q = query(
-    collection(db, "reservations"),
-    where("date", "==", today)
-  );
+  // settings
+  useEffect(() => {
+    const settingsRef = doc(db, "settings", "clinic");
+    return onSnapshot(settingsRef, (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data() || {};
 
-  // 監視開始
-  const unsub = onSnapshot(q, snap => {
-    // 今が午前か午後か判定
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setHours(14, 30, 0, 0);
-    const maxLimit = now < cutoff ? maxMorning : maxAfternoon;
+      setIsReservationOpen(readBool(d.isReservationOpen, true));
 
-    setIsFull(snap.size >= maxLimit);
-  });
+      const fallback =
+        toNum(d.maxReservationsDay, 0) ||
+        (toNum(d.maxReservationsMorning, 0) + toNum(d.maxReservationsAfternoon, 0)) ||
+        0;
 
-  return () => unsub();
-}, [maxMorning, maxAfternoon]);
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
+      setMaxPerDay(toNum(d.maxReservationsPerDay, fallback));
+
+      const until = d.forceOpenUntil?.toDate?.() ?? null;
+      setForceOpenUntil(until);
+      setForceOpenActive(until ? nowJST() < until : false);
+
+      setSettingsLoaded(true);
     });
+  }, []);
+
+  // force open polling
+  useEffect(() => {
+    if (!forceOpenUntil) {
+      setForceOpenActive(false);
+      return;
+    }
+    const tick = () => setForceOpenActive(nowJST() < forceOpenUntil);
+    tick();
+    const id = setInterval(tick, 30 * 1000);
+    return () => clearInterval(id);
+  }, [forceOpenUntil]);
+
+  // today count from reservations (createdAt range)
+  useEffect(() => {
+    const now = nowJST();
+    const { s, e } = getDayRangeJST(now);
+
+    const qToday = query(
+      collection(db, "reservations"),
+      where("createdAt", ">=", Timestamp.fromDate(s)),
+      where("createdAt", "<", Timestamp.fromDate(e))
+    );
+
+    return onSnapshot(
+      qToday,
+      (snap) => {
+        const n = snap.docs.filter((d) => (d.data()?.status || "").trim() !== "キャンセル済").length;
+        setTodayCount(n);
+        setCountLoaded(true);
+      },
+      (err) => {
+        console.error("todayCount購読エラー:", err);
+        setCountLoaded(true);
+      }
+    );
+  }, []);
+
+  const isFull = useMemo(() => {
+    return !forceOpenActive && maxPerDay > 0 && todayCount >= maxPerDay;
+  }, [forceOpenActive, maxPerDay, todayCount]);
+
+  const blocked = useMemo(() => {
+    if (!settingsLoaded || !countLoaded) return true;
+    if (forceOpenActive) return false;
+    if (!isReservationOpen) return true;
+    return isFull;
+  }, [settingsLoaded, countLoaded, forceOpenActive, isReservationOpen, isFull]);
+
+  // 呼び出し中一覧
+  const fetchCallingPatients = async () => {
+    setLoading(true);
+
+    const now = nowJST();
+    const { s: dayStart, e: dayEnd } = getDayRangeJST(now);
+
+    const qCalling = query(
+      collection(db, "reservations"),
+      where("status", "==", "呼び出し中"),
+      where("createdAt", ">=", Timestamp.fromDate(dayStart)),
+      where("createdAt", "<", Timestamp.fromDate(dayEnd))
+    );
+
+    const snap = await getDocs(qCalling);
+    const list = snap.docs
+      .map((d) => ({ id: d.id, receptionNumber: d.data().receptionNumber }))
+      .sort((a, b) => a.receptionNumber - b.receptionNumber);
+
+    setCallingPatients(list);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchCallingPatients();
+  }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((p) => ({ ...p, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isFull) {
-      alert("申し訳ありません。本日の予約上限に達しました。");
+    if (isSubmitting) return;
+
+    setErrorMessage("");
+
+    if (!settingsLoaded || !countLoaded) {
+      setErrorMessage("読み込み中です。少し待ってからもう一度お試しください。");
       return;
     }
 
+    // バリデーション
+    const kana = formData.name?.trim() || "";
+    if (!/^[\u30A0-\u30FF\u30FC\s]+$/.test(kana)) {
+      setErrorMessage("お名前はカタカナで入力してください。");
+      return;
+    }
+    if (formData.birthdate && !/^\d{8}$/.test(formData.birthdate)) {
+      setErrorMessage("生年月日は8桁の半角数字（YYYYMMDD）で入力してください。");
+      return;
+    }
+    if (!/^\d{10,11}$/.test(formData.phone)) {
+      setErrorMessage("電話番号は半角数字10〜11桁で入力してください。");
+      return;
+    }
+
+    if (blocked) {
+      alert("申し訳ありません。現在、予約受付を停止しています。");
+      return;
+    }
+
+    setIsSubmitting(true);
+
     try {
-      // ① 全予約から既存の receptionNumber を集める
-      const allSnap = await getDocs(collection(db, "reservations"));
-      const used = new Set(allSnap.docs.map(d => d.data().receptionNumber));
-
-      // ② 1から順に回して、未使用かつ6の倍数でない最小番号を探す
-      let newReceptionNumber = 1;
-      while (used.has(newReceptionNumber) || newReceptionNumber % 6 === 0) {
-        newReceptionNumber++;
-      }
-
-      // ③ Firestore に書き込む
-      const todayDate = new Date().toISOString().split("T")[0];
-      await addDoc(collection(db, "reservations"), {
+      const { receptionNumber: nextNo } = await createReservation({
         type: "初診",
         name: formData.name,
-        phone: formData.phone || "不明",
-        cardNumber: formData.cardNumber || "",
-        receptionNumber: newReceptionNumber,
-        date: todayDate,
+        birthdate: formData.birthdate,
+        phone: formData.phone || "",
         status: "未受付",
-        createdAt: serverTimestamp(),
       });
 
-      setReceptionNumber(newReceptionNumber);
+      setReceptionNumber(nextNo);
       setFormData({ name: "", birthdate: "", phone: "" });
-      fetchCallingPatients();
-    } catch (error) {
-      console.error("Firestore 書き込みエラー:", error);
-      alert("予約に失敗しました。もう一度試してください。");
-    }
+      await fetchCallingPatients();
+    } catch (err) {
+  console.error(err);
+  setErrorMessage(err?.message || "予約に失敗しました。もう一度お試しください。");
+} finally {
+  setIsSubmitting(false);
+}
   };
 
-  // 🔥 Firestore から「呼び出し中の患者情報」を取得（番号順に並べる）
-  const fetchCallingPatients = async () => {
-    console.log("📡 Firestore から呼び出し中の患者情報を取得");
-
-    const callQuery = query(
-      collection(db, "reservations"),
-      where("status", "==", "呼び出し中")
-    );
-
-    try {
-      const snapshot = await getDocs(callQuery);
-      let callList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        receptionNumber: doc.data().receptionNumber ?? "未設定"
-      }));
-
-      // 🔥 `receptionNumber` の昇順に並べ替え
-      callList.sort((a, b) => a.receptionNumber - b.receptionNumber);
-
-      setCallingPatients(callList);
-    } catch (error) {
-      console.error("Firestore からのデータ取得に失敗:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const showBlockedBanner = (!forceOpenActive && (blocked || isFull || !isReservationOpen)) && settingsLoaded && countLoaded;
 
   return (
     <div className="flex flex-col items-center justify-center p-4 w-full max-w-lg mx-auto">
       <img src="/logo.png" alt="けんおう皮フ科クリニック" className="w-40 h-40 mb-6" />
 
-      <h2 className="text-3xl font-bold text-center">けんおう皮フ科クリニック</h2>
-      <h3 className="text-2xl font-semibold text-center">初診予約</h3>
+      <h2 className="text-3xl font-bold">けんおう皮フ科クリニック</h2>
+      <h3 className="text-2xl font-semibold mb-6">初診予約</h3>
 
-      {/* 🚨 追加：上限オーバーメッセージ */}
-{isFull && (
-  <div className="mt-6 text-center text-red-600 font-bold">
-    ⛔ 本日の予約上限数に達しました。受付を締め切りました。
-  </div>
-)}
+      {(!settingsLoaded || !countLoaded) && (
+        <div className="text-gray-600 font-bold mb-4">読み込み中…</div>
+      )}
+
+      {showBlockedBanner && (
+        <div className="text-red-600 font-bold mb-4">
+          ⛔ 本日の予約上限に達しました。受付を締め切りました。
+        <p className="text-lg font-bold">※web予約人数が上限に達しても、予約受付時間内</p>
+        <p className="text-lg font-bold">(午前は9時30分～12時30分、午後は15時～18時(土曜は9時30分～15時まで))に直接ご来院いただければ診察いたします。</p>
+ 
+        </div>
+      )}
 
       {receptionNumber ? (
         <div className="text-center">
           <p className="text-lg font-bold">予約が完了しました！</p>
-          <p className="text-6xl font-extrabold text-blue-500 mt-4">{receptionNumber}</p>
-          <p className="text-sm text-gray-600 mt-2">
-            受付番号を忘れないよう、スクリーンショットを撮るかメモをお取りください。
+
+          <p className="text-6xl font-extrabold text-blue-500 my-4">{receptionNumber}</p>
+
+          <div className="w-full flex justify-center">
+            <img src="/yoro.png" alt="チンおう" className="w-40 h-40 mb-6" />
+          </div>
+
+          <p className="text-2xl text-red-600 font-bold mt-4">
+            ※受付番号を表示した画面をスクショして受付にお見せください。
+            <br />
           </p>
 
-          {/* 🔹 予約トップページに戻るボタン（青） */}
-          <div className="mt-6">
-            <Link href="/">
-              <div className="px-8 py-4 bg-blue-500 text-white text-center text-2xl font-bold rounded-lg hover:bg-blue-700 shadow-lg cursor-pointer">
-                予約トップに戻る
-              </div>
-            </Link>
-          </div>
-
-          {/* 🔥 呼び出し中の患者情報 */}
-          <div className="text-center text-lg font-semibold mt-12">
-            <p className="text-gray-700 text-2xl">現在お呼び出し中の方</p>
-
-            {loading ? (
-              <p className="text-gray-500 mt-4 text-xl">データを取得中...</p>
-            ) : callingPatients.length > 0 ? (
-              <div className="bg-gradient-to-r from-blue-600 to-blue-400 p-6 rounded-2xl shadow-xl text-white text-2xl font-bold mt-4 w-full max-w-lg">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 justify-center">
-                  {callingPatients.map((patient) => (
-                    <div key={patient.id} className="bg-white text-blue-600 px-8 py-4 rounded-xl shadow-lg text-6xl font-bold flex items-center justify-center">
-                      {patient.receptionNumber}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500 mt-4 text-xl">現在呼び出し中の方はいません</p>
-            )}
-          </div>
+          <Link href="/" className="mt-6 inline-block px-8 py-4 bg-blue-500 text-white text-2xl font-bold rounded-lg hover:bg-blue-700">
+            トップに戻る
+          </Link>
         </div>
       ) : (
-        <form className="flex flex-col gap-6 w-full max-w-md" onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="w-full max-w-md flex flex-col gap-6">
           <input
             type="text"
-            placeholder="名前（カタカナ）"
             name="name"
             value={formData.name}
             onChange={handleChange}
+            placeholder="お名前をカタカナで（例：ケンオウ タロウ）"
             required
-            className="border p-4 rounded-md w-full text-lg"
+            className="border p-4 rounded-md text-lg"
           />
-          <BirthdateInput onChange={(value) => setFormData({ ...formData, birthdate: value })} />
+
+          <BirthdateInput
+            name="birthdate"
+            value={formData.birthdate}
+            onChange={(v) => setFormData((p) => ({ ...p, birthdate: v }))}
+          />
+
           <input
             type="tel"
-            placeholder="電話番号"
             name="phone"
             value={formData.phone}
             onChange={handleChange}
+            placeholder="電話番号（10〜11桁）"
+            className="border p-4 rounded-md text-lg"
             required
-            className="border p-4 rounded-md w-full text-lg"
           />
+
+          {errorMessage && <p className="text-red-600 text-sm">{errorMessage}</p>}
+
           <button
             type="submit"
-            disabled={isFull}
-            className={`px-8 py-6 bg-blue-500 text-white text-2xl font-bold rounded-lg hover:bg-blue-700 shadow-lg ${
-              isFull ? "opacity-50 cursor-not-allowed" : ""
+            disabled={blocked || isSubmitting}
+            className={`px-8 py-6 bg-blue-500 text-white text-2xl font-bold rounded-lg ${
+              blocked || isSubmitting ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"
             }`}
           >
-            予約する
+            {isSubmitting ? "送信中…" : "予約する"}
           </button>
         </form>
       )}

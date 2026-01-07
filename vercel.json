@@ -3,5 +3,6 @@
       { "source": "/shoshin", "destination": "/reservation/shoshin", "permanent": true },
       { "source": "/saishin", "destination": "/reservation/saishin", "permanent": true }
     ]
+    
   }
   

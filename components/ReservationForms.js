@@ -1,4 +1,9 @@
 import React, { useState, useEffect } from "react";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import { db } from "../firebaseConfig";
 import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, getDoc, orderBy } from "firebase/firestore";
 import BirthdateInput from "../components/BirthdateInput";
@@ -14,7 +19,7 @@ export default function ReservationForm({ type }) {
   useEffect(() => {
     const checkReservationLimit = async () => {
       try {
-        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+        const today = dayjs().tz("Asia/Tokyo").format("YYYY-MM-DD"); // JST基準
         const q = query(collection(db, "reservations"), where("date", "==", today));
         const snapshotReservations = await getDocs(q);
         const todayReservations = snapshotReservations.size;
@@ -39,7 +44,7 @@ export default function ReservationForm({ type }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const todayDate = dayjs().tz("Asia/Tokyo").format("YYYY-MM-DD"); // JST基準
     console.log(`📡 予約の日付 (date): ${todayDate}`); // 🔥 `date` の値をデバッグ
     
 
@@ -54,7 +59,7 @@ export default function ReservationForm({ type }) {
       const q = query(collection(db, "reservations"), orderBy("receptionNumber", "desc"));
       const snapshot = await getDocs(q);
       const newReceptionNumber = snapshot.empty ? 1 : (snapshot.docs[0].data()?.receptionNumber || 0) + 1;
-      const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const todayDate = dayjs().tz("Asia/Tokyo").format("YYYY-MM-DD");  // JST基準
       console.log(`📡 予約の日付 (date): ${todayDate}`); // 🔥 `date` の値をデバッグ
       
       await addDoc(collection(db, "reservations"), {
@@ -64,7 +69,7 @@ export default function ReservationForm({ type }) {
         phone: formData.phone,
         cardNumber: formData.cardNumber || "",
         receptionNumber: newReceptionNumber,
-        date: todayDate, // 🔥 予約の日付を `YYYY-MM-DD` 形式で保存
+        date: todayDate, // JST基準なら午前0時に切り替わる
         status: "未受付",
         createdAt: serverTimestamp(),
       });

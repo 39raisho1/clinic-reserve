@@ -38,19 +38,30 @@ export default function CallScreen() {
 
   return (
     <div className="h-screen flex flex-col items-center justify-center bg-blue-500 text-white text-center">
-      <h1 className="text-6xl font-bold mb-12">呼び出し中の方</h1>
+      <h1 className="text-8xl font-bold mb-12">呼び出し中の方</h1>
       
-      {currentCalls.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-          {currentCalls.map((call) => (
-            <div key={call.id} className="p-16 bg-white text-black rounded-2xl shadow-xl flex items-center justify-center">
-              <p className="text-8xl font-extrabold">{call.receptionNumber}</p>
-            </div>
-          ))}
+{currentCalls.length > 0 ? (
+  <>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
+      {currentCalls.map((call) => (
+        <div
+          key={call.id}
+          className="p-16 bg-white text-black rounded-2xl shadow-xl flex items-center justify-center"
+        >
+          <p className="text-9xl font-extrabold">{call.receptionNumber}</p>
         </div>
-      ) : (
-        <p className="text-4xl font-bold">現在呼び出し中の患者はいません。</p>
-      )}
+      ))}
+    </div>
+    {/* ↑ ここまでグリッド */}
+    {/* ↓ グリッド全体の下に一度だけ案内文を表示 */}
+    <p className="mt-12 text-8xl font-bold text-white text-center">
+      中待合へどうぞ
+    </p>
+  </>
+) : (
+  <p className="text-8xl font-bold">現在呼び出し中の方はいません。</p>
+)}
+
     </div>
   );
 }
