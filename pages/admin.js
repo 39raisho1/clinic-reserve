@@ -1261,11 +1261,36 @@ export default function AdminPage() {
                 初診/再診 ▲▼
               </th>
 
-              <th className="border p-2 w-16">診察券番号</th>
-              <th className="border p-2 w-36">名前</th>
-              <th className="border p-2 w-16">生年月日</th>
-              <th className="border p-2 w-60">コメント</th>
-              <th className="border p-2 w-16">電話番号</th>
+              <th
+                className="border p-2 cursor-pointer w-16"
+                onClick={() => handleSort("cardNumber")}
+              >
+                診察券番号 ▲▼
+              </th>
+              <th
+                className="border p-2 cursor-pointer w-44"
+                onClick={() => handleSort("name")}
+              >
+                名前 ▲▼
+              </th>
+              <th
+                className="border p-2 cursor-pointer w-16"
+                onClick={() => handleSort("birthdate")}
+              >
+                生年月日 ▲▼
+              </th>
+              <th
+                className="border p-2 cursor-pointer w-60"
+                onClick={() => handleSort("comment")}
+              >
+                コメント ▲▼
+              </th>
+              <th
+                className="border p-2 cursor-pointer w-16"
+                onClick={() => handleSort("phone")}
+              >
+                電話番号 ▲▼
+              </th>
               <th className="border p-2 w-8">予約削除</th>
             </tr>
           </thead>
