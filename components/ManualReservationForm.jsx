@@ -64,7 +64,7 @@ export default function ManualReservationForm() {
       const dateKeyISO = isoDateKey(now);    // YYYY-MM-DD
 
       // AdminPage と同じ（1日単位に統一）
-      const counterRef = doc(db, "counters", `${dateKey}`);
+      const counterRef = doc(db, "counters", dateKeyISO);
 
       // ★スロット
       const slotRef = doc(db, "reservationSlots", slotDocId(dateKeyISO, submittedNo));

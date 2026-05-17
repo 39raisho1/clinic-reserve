@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import Papa from "papaparse";
 import ManualReservationForm from "../components/ManualReservationForm";
-import { nowJST, jstDayRange } from "../utils/timeJST.js";
+import { nowJST, isoDateKey, jstDayRange } from "../utils/timeJST.js";
 
 // ──────────────────────────────────────────
 // ログ記録
@@ -604,6 +604,20 @@ export default function AdminPage() {
     try {
       if (newStatus === "キャンセル済") {
         await updateDoc(ref, { status: "キャンセル済", canceledAt: serverTimestamp() });
+        // カウンターを減算（キャンセルは削除と違いドキュメントは残るため穴リストには追加しない）
+        const r = reservationsRaw.find((rv) => rv.id === id);
+        if (r) {
+          const dk = r.dateKeyISO || r.dateKey;
+          if (dk) {
+            const cRef = doc(db, "counters", dk);
+            await runTransaction(db, async (tx) => {
+              const snap = await tx.get(cRef);
+              const c = snap.exists() ? snap.data() || {} : {};
+              const count = Number(c.count ?? 0);
+              if (count > 0) tx.set(cRef, { count: count - 1 }, { merge: true });
+            });
+          }
+        }
       } else if (newStatus === "受付済") {
         await updateDoc(ref, { status: newStatus, acceptedAt: serverTimestamp() });
       } else {
@@ -706,7 +720,7 @@ export default function AdminPage() {
     // 削除した番号を穴リストに追加（日付キーごとにグループ化）
     const byDateKey = {};
     for (const r of toDelete) {
-      const dk = r.dateKey || r.dateKeyISO;
+      const dk = r.dateKeyISO || r.dateKey;
       if (!dk) continue;
       if (!byDateKey[dk]) byDateKey[dk] = [];
       byDateKey[dk].push(r);
@@ -959,7 +973,8 @@ export default function AdminPage() {
     allowEvenIfOverLimit = false,
   }) => {
     const now = nowJST();
-    const dateKey = toDateKeyJST(now);
+    const dateKey    = toDateKeyJST(now);
+    const dateKeyISO = isoDateKey(now);
     const { start, end } = jstDayRange(now);
 
     // ① トランザクション外で今日の予約を全件取得（カウンターズレに備えた実態確認）
@@ -981,7 +996,7 @@ export default function AdminPage() {
     const dbMaxVip  = usedVip.size  > 0 ? Math.max(...usedVip)  : 0;
 
     const settingsRef    = doc(db, "settings", "clinic");
-    const counterRef     = doc(db, "counters", dateKey);
+    const counterRef     = doc(db, "counters", dateKeyISO);
     const reservationsCol = collection(db, "reservations");
 
     // ② トランザクションで採番・書き込み（Firestoreが競合を自動リトライ）
@@ -1052,6 +1067,7 @@ export default function AdminPage() {
         status: "予約済",
         ...payload,
         dateKey,
+        dateKeyISO,
         vip: !!vip,
         createdBy: "admin",
         bypass: {
