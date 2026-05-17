@@ -126,6 +126,12 @@ export default function Home() {
       <h1 className="text-4xl font-bold text-center mb-4">
         けんおう皮フ科クリニック 予約ページ
       </h1>
+
+      <div className="w-full max-w-md mt-4 mb-2 bg-red-50 border-2 border-red-500 rounded-xl p-4 text-center">
+        <p className="text-xl text-red-600 font-bold">6月13日(土)は学会参加のため休診します。</p>
+        <p className="text-xl text-red-600 font-bold mt-2">6月27日(土)は学会参加のため15時までの受付となります。</p>
+      </div>
+
 <p className="text-3xl text-red-600 font-bold mt-6 text-center">女性医師による診察が始まりました。</p>
 <p className="text-xl text-red-600 font-bold mt-6 text-center">4月より医師が増え、原則2診体制(月木金は女性医師)になりました。</p>
 <p className="text-xl text-red-600 font-bold mt-6 text-center">それに伴い土曜日でも14:30～18:00まで午後のweb予約を受け付ける体制に戻しました。</p>
@@ -200,9 +206,6 @@ export default function Home() {
       <img src="/chin.png" alt="チンおう" className="w-40 h-40 mb-6" />
       <p className="text-3xl text-red-600 font-bold mt-6 text-center">～お知らせ～</p>
 
-      <p className="text-xl text-red-600 font-bold mt-6 text-center">6月13日(土)は学会参加のため休診します。</p>
-      <p className="text-xl text-red-600 font-bold mt-6 text-center">6月27日(土)は学会参加のため15時までの受付となります。</p>
-      <p className="text-xl text-red-600 font-bold mt-6 text-center"></p>
       <p className="text-xl text-red-600 font-bold mt-6 text-center">当院は火・水はお休みをいただいています。</p>
       <p className="text-xl text-red-600 font-bold mt-6 text-center">4月より、2診体制での診療を開始しております。</p>
       <p className="text-xl text-red-600 font-bold mt-6 text-center">これに伴い、これまで土曜日に実施していた午前・午後の通し診療を、従来どおり午前・午後の診療体制へ変更いたします。</p>
