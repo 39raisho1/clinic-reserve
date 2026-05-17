@@ -9,9 +9,9 @@ export function nowJST() {
 
 // YYYY-MM-DD（JST）
 export function isoDateKey(d = nowJST()) {
-  const y = new Intl.DateTimeFormat("ja-JP", { timeZone: TZ, year: "numeric" }).format(d);
-  const m = new Intl.DateTimeFormat("ja-JP", { timeZone: TZ, month: "2-digit" }).format(d);
-  const day = new Intl.DateTimeFormat("ja-JP", { timeZone: TZ, day: "2-digit" }).format(d);
+  const y = String(d.getFullYear());
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 

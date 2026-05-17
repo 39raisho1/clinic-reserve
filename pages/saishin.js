@@ -61,12 +61,7 @@ export default function SaishinPage() {
 
       setIsReservationOpen(readBool(d.isReservationOpen, true));
 
-      const fallback =
-        toNum(d.maxReservationsDay, 0) ||
-        (toNum(d.maxReservationsMorning, 0) + toNum(d.maxReservationsAfternoon, 0)) ||
-        0;
-
-      setMaxPerDay(toNum(d.maxReservationsPerDay, fallback));
+      setMaxPerDay(toNum(d.maxReservationsDay, 0) || toNum(d.maxReservationsPerDay, 0));
 
       const until = d.forceOpenUntil?.toDate?.() ?? null;
       setForceOpenUntil(until);
