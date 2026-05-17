@@ -99,11 +99,11 @@ export default function CrowdStatus() {
     const inRoom = acceptedCount + callingCount; // 実際に院内にいる可能性が高い人数
     const ratio = ROOM_CAPACITY > 0 ? inRoom / ROOM_CAPACITY : 0;
 
-    if (ratio <= 0.2) {
+    if (ratio <= 0.5) {
       return { label: "かなり空いています", color: "bg-green-500" };
-    } else if (ratio <= 0.5) {
+    } else if (ratio <= 0.7) {
       return { label: "やや混雑しています", color: "bg-yellow-400" };
-    } else if (ratio < 0.7) {
+    } else if (ratio < 0.9) {
       return { label: "混雑しています", color: "bg-orange-500" };
     } else {
       return { label: "非常に混雑しています（満席レベル）", color: "bg-red-600" };
@@ -129,7 +129,7 @@ export default function CrowdStatus() {
 
   return (
     <div className="w-full max-w-xl mt-6 p-6 rounded-2xl bg-white shadow-xl border border-gray-200">
-      <h2 className="text-2xl font-bold mb-4 text-center">本日の混雑状況</h2>
+      <h2 className="text-2xl font-bold mb-4 text-center">現在の院内混雑状況</h2>
 
       {/* 混雑レベルバッジ */}
       <div className="flex items-center justify-center mb-4">

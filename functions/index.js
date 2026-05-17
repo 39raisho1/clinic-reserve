@@ -84,3 +84,53 @@ exports.manualToggleReservation = functions
       res.status(500).send("エラー：" + e.message);
     }
   });
+
+/**
+ * 毎日 8:30 JST に予約受付を自動開始
+ */
+exports.autoOpen830 = functions.pubsub
+  .schedule("30 8 * * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
+    const ref  = db.doc(SETTINGS_PATH);
+    const snap = await ref.get();
+    const data = snap.exists ? snap.data() : {};
+
+    if (!data.timerOpen830)      return null;
+    if (data.isReservationOpen)  return null;
+
+    await ref.update({ isReservationOpen: true, forceOpenUntil: null });
+    await db.collection("logs").add({
+      action:    "タイマー：自動開始",
+      details:   "8:30タイマー により予約受付を自動再開",
+      user:      "system",
+      device:    "server",
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return null;
+  });
+
+/**
+ * 毎日 14:30 JST に予約受付を自動開始
+ */
+exports.autoOpen1430 = functions.pubsub
+  .schedule("30 14 * * *")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
+    const ref  = db.doc(SETTINGS_PATH);
+    const snap = await ref.get();
+    const data = snap.exists ? snap.data() : {};
+
+    if (!data.timerOpen1430)     return null;
+    if (data.isReservationOpen)  return null;
+
+    await ref.update({ isReservationOpen: true, forceOpenUntil: null });
+    await db.collection("logs").add({
+      action:    "タイマー：自動開始",
+      details:   "14:30タイマー により予約受付を自動再開",
+      user:      "system",
+      device:    "server",
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return null;
+  });

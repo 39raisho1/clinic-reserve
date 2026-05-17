@@ -66,7 +66,7 @@ export default function PendingList() {
     return (
       <div className="w-full max-w-xl mt-4 p-3 rounded-2xl bg-white shadow">
         <p className="text-center text-gray-600 text-sm">
-          現在、呼び出し中の方はいません。
+          現在、呼び出し中の方はいません。※午前は20番までの方は9:30にご来院ください。
         </p>
       </div>
     );
@@ -75,10 +75,12 @@ export default function PendingList() {
   return (
     <div className="w-full max-w-xl mt-4 p-4 rounded-2xl bg-white shadow border border-gray-200">
       <h2 className="text-2xl font-bold mb-2 text-center">
-        呼び出し中の方
+        これから診察にお呼び出しする方
+        <p className="text-xl text-red-600 font-bold mt-6 text-center">※番号が表示されている方は診察の順番が近くなってきましたのでご来院ください。</p>
+        
       </h2>
       <p className="text-xs text-center text-gray-500 mb-2">
-        ※呼び出し中ですので診療時間になりましたら受付にお越しください。</p>
+        ※午前は20番までの方はご来院ください。</p>
       <p className="text-xs text-center text-gray-500 mb-2">(午前：9：30～、午後：15：00～)</p>
       <div className="flex flex-wrap gap-2 justify-center">
         {numbers.map((no) => (
