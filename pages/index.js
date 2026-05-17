@@ -200,6 +200,8 @@ export default function Home() {
       <img src="/chin.png" alt="チンおう" className="w-40 h-40 mb-6" />
       <p className="text-3xl text-red-600 font-bold mt-6 text-center">～お知らせ～</p>
 
+      <p className="text-xl text-red-600 font-bold mt-6 text-center">6月13日(土)は学会参加のため休診します。</p>
+      <p className="text-xl text-red-600 font-bold mt-6 text-center">6月27日(土)は学会参加のため15時までの受付となります。</p>
       <p className="text-xl text-red-600 font-bold mt-6 text-center"></p>
       <p className="text-xl text-red-600 font-bold mt-6 text-center">当院は火・水はお休みをいただいています。</p>
       <p className="text-xl text-red-600 font-bold mt-6 text-center">4月より、2診体制での診療を開始しております。</p>
