@@ -2,11 +2,14 @@ import React, { useMemo, useState } from "react";
 import {
   collection,
   doc,
+  getDocs,
+  query,
   runTransaction,
   serverTimestamp,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebaseConfig";
-import { nowJST, isoDateKey } from "../utils/timeJST.js";
+import { nowJST, isoDateKey, jstDayRange } from "../utils/timeJST.js";
 
 // AdminPage と同じ仕様：JSTの YYYYMMDD
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -62,6 +65,17 @@ export default function ManualReservationForm() {
       const now = nowJST();
       const dateKey = toDateKeyJST(now);     // YYYYMMDD
       const dateKeyISO = isoDateKey(now);    // YYYY-MM-DD
+
+      // reservations コレクションで当該番号が本日すでに使われていないか確認
+      // （Web予約はreservationSlotsを作らないためslotチェックだけでは不十分）
+      const conflictSnap = await getDocs(
+        query(collection(db, "reservations"), where("receptionNumber", "==", submittedNo))
+      );
+      const alreadyUsed = conflictSnap.docs.some((d) => {
+        const r = d.data();
+        return r.dateKeyISO === dateKeyISO || r.dateKey === dateKeyISO || r.dateKey === dateKey;
+      });
+      if (alreadyUsed) throw new Error("DUPLICATE");
 
       // AdminPage と同じ（1日単位に統一）
       const counterRef = doc(db, "counters", dateKeyISO);
