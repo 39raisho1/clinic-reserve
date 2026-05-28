@@ -9,3 +9,7 @@ functions/node_modules/
 
 # 環境変数ファイル（絶対コミットしない）
 .env*
+
+# サービスアカウントキー（絶対コミットしない）
+**/serviceAccountKey.json
+serviceAccountKey.json
